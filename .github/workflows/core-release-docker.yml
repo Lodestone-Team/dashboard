@@ -1,13 +1,28 @@
 name: Core - Release Docker
 
+
 on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to download binaries from, must be an existing release"
+        required: true
+        type: string
+      stable:
+        description: "Is this a stable release?"
+        required: true
+        type: boolean
+
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}_core
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   core-release-docker:
@@ -39,10 +54,14 @@ jobs:
         uses: dsaltares/fetch-gh-release-asset@master
         with:
           regex: true
-          file: "lodestone_core_*"
-          target: release/
-          version: "tags/${{ github.event.release.tag_name }}"
+          file: "lodestone_core_.*"
+          target: core/release/
+          version: "tags/${{ inputs.version || github.ref_name }}"
           token: ${{ secrets.GITHUB_TOKEN }}
+      
+      - id: tree
+        name: List files
+        run: tree .
 
       # https://stackoverflow.com/questions/73402042/github-action-expressions-split-string
       - name: set version string
@@ -53,16 +72,16 @@ jobs:
 
       - name: set docker version label
         env:
-          LABEL: ${{ !github.event.release.prerelease && 'latest-stable' || 'latest-beta' }}
+          LABEL: ${{ (inputs.stable || !github.event.release.prerelease) && 'latest-stable' || 'latest-beta' }}
         id: release_type
         run: echo "label=${LABEL}" >> $GITHUB_OUTPUT
 
       - name: build and push
         uses: docker/build-push-action@v3
         with:
-          context: .
+          context: ./core
           platforms: linux/amd64,linux/arm64
-          file: ./githubactions.Dockerfile
+          file: ./core/githubactions.Dockerfile
           build-args: |
             lodestone_version=${{ steps.release_asset.outputs.version }}
           push: true

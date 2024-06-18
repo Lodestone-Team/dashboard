@@ -4232,7 +4232,7 @@ dependencies = [
 
 [[package]]
 name = "lodestone-client"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "lodestone_core",
  "notify-rust",
@@ -4248,7 +4248,7 @@ dependencies = [
 
 [[package]]
 name = "lodestone_core"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "ansi_term",
  "argon2",

@@ -351,7 +351,7 @@ export default function FileList({
             </p>
             <div className="grow"></div>
 
-            <p className="hidden min-w-[8ch] text-left text-gray-500 @xs:inline">
+            <p className="@xs:inline hidden min-w-[8ch] text-right text-gray-500">
               {file.modification_time || file.creation_time
                 ? formatTimeAgo(
                     Number(file.modification_time ?? file.creation_time) * 1000
@@ -359,7 +359,7 @@ export default function FileList({
                 : 'Unknown Creation Time'}
             </p>
 
-            <p className="hidden min-w-[8ch] text-right text-gray-500 @sm:inline">
+            <p className="@sm:inline hidden min-w-[8ch] text-right text-gray-500">
               {file.file_type === 'Directory'
                 ? ''
                 : file.size

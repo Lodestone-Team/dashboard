@@ -4,10 +4,23 @@ on:
   release:
     types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Release tag to download binaries from, must be an existing release"
+        required: true
+        type: string
+      stable:
+        description: "Is this a stable release?"
+        required: true
+        type: boolean
 
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: "${{ github.repository }}_dashboard"
+
+permissions:
+  contents: read
+  packages: write
 
 jobs:
   dashboard-release-docker:
@@ -34,29 +47,20 @@ jobs:
         with:
           string: ${{ env.REGISTRY}}/${{ env.IMAGE_NAME }}
 
-      # https://stackoverflow.com/questions/73402042/github-action-expressions-split-string
-      - name: set version string
-        env:
-          VERSION: ${{ steps.release_asset.outputs.version }}
-        id: substring
-        run: echo "version=${VERSION:1}" >> $GITHUB_OUTPUT
-
       - name: set docker version label
         env:
-          LABEL: ${{ !github.event.release.prerelease && 'latest-stable' || 'latest-beta' }}
+          LABEL: ${{ (inputs.stable || !github.event.release.prerelease) && 'latest-stable' || 'latest-beta' }}
         id: release_type
         run: echo "label=${LABEL}" >> $GITHUB_OUTPUT
 
       - name: build and push
         uses: docker/build-push-action@v3
         with:
-          context: .
+          context: ./dashboard
           platforms: linux/amd64,linux/arm64
-          file: ./Dockerfile
-          build-args: |
-            lodestone_version=${{ steps.release_asset.outputs.version }}
+          file: ./dashboard/Dockerfile
           push: true
           tags: |
             ${{ steps.string_tag.outputs.lowercase }}:latest
             ${{ steps.string_tag.outputs.lowercase }}:${{ steps.release_type.outputs.label }}
-            ${{ steps.string_tag.outputs.lowercase }}:${{ steps.substring.outputs.version }}
+            ${{ steps.string_tag.outputs.lowercase }}:${{ inputs.version || github.event.release.tag_name }}

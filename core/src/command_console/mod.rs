@@ -38,7 +38,11 @@ pub fn init(app_state: AppState) {
             loop {
                 let app_state = app_state.clone();
                 let mut input = String::new();
-                std::io::stdin().read_line(&mut input).unwrap();
+                let buf_size = std::io::stdin().read_line(&mut input).unwrap();
+                if buf_size == 0 {
+                    println!("EOF");
+                    break;
+                }
                 let input_tokens = input.split_whitespace().collect::<Vec<&str>>();
                 match input_tokens.first() {
                     Some(&"di") => {
@@ -46,7 +50,7 @@ pub fn init(app_state: AppState) {
                         handle_docker_command(&input_tokens[1..], app_state).await;
                     }
                     _ => {
-                        println!("Unknown command");
+                        println!("Unknown command: {}", input);
                         continue;
                     }
                 }

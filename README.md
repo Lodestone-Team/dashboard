@@ -33,10 +33,10 @@ Have a feature request? Let us know by creating an issue!
 
 ## Supported Platforms and Architectures
 - Windows (x86_64)
-- Linux (x86_64)
+- Linux (x86_64 and ARM)
 - MacOS (Apple Silicon)
 
-We have discontinued support for Intel Macs and ARM Linux as of 0.5.0 due to the lack of hardware to test on. Get in contact with us if you would like to see support for these platforms.
+We are deprecating support for Intel Macs due to the lack of hardware to test on. Get in contact with us if you would like to see additional platform supports.
 
 ## Lodestone CLI vs Lodestone Desktop
 

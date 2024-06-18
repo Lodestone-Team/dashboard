@@ -15,7 +15,7 @@ lto = "thin"
 codegen-units = 1
 
 [workspace.package]
-version = "0.5.0"
+version = "0.5.1"
 homepage = "https://github.com/Lodestone-Team"
 readme = "README.md"
 edition = "2021"
