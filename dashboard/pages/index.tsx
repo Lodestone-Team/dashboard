@@ -46,7 +46,7 @@ import InstanceTabs from 'pages/InstanceTabs/InstanceTabs';
 import ProfilePage from 'pages/settings/profile';
 import CoreSettings from 'pages/settings/CoreSettings';
 import UserSettings from 'pages/settings/UserSettings';
-
+import * as tailscale from '@tailscale/connect';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -69,24 +69,24 @@ const InstanceTabList = [
 ];
 
 export const CoreSettingsTabList = [
-    {
+  {
     title: 'General',
-      path: 'general',
-      content: <CoreSettings />,
-    },
-    {
-      title: 'Users',
-      path: 'users',
-      content: <UserSettings />,
-    },
+    path: 'general',
+    content: <CoreSettings />,
+  },
+  {
+    title: 'Users',
+    path: 'users',
+    content: <UserSettings />,
+  },
 ];
 
 export const AccountSettingsTabList = [
-    {
+  {
     title: 'Profile',
-      path: 'profile',
-      content: <ProfilePage />,
-    },
+    path: 'profile',
+    content: <ProfilePage />,
+  },
 ];
 
 export default function App() {
