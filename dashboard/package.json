@@ -24,6 +24,7 @@
     "@heroicons/react": "^2.0.16",
     "@monaco-editor/react": "^4.4.6",
     "@next/font": "^13.2.1",
+    "@tailscale/connect": "^1.39.98-t02582083d-gf31108a29",
     "@tanstack/react-query": "^4.13.5",
     "@tanstack/react-virtual": "^3.0.0-beta.32",
     "@tauri-apps/api": "^1.4.0",
