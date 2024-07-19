@@ -312,7 +312,8 @@ export const formatTimeAgo = (time_ms: number) => {
   const diffMinutes = Math.floor(diff / (1000 * 60));
   const diffSeconds = Math.floor(diff / 1000);
   if (diffDays > 0) {
-    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    const date = new Date(time_ms);
+    return `${date.toLocaleString('default', { month: 'long', year: 'numeric', day: 'numeric' })}`;
   } else if (diffHours > 0) {
     return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
   } else if (diffMinutes > 0) {
