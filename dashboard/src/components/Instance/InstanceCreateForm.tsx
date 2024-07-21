@@ -1,9 +1,9 @@
 import Button from 'components/Atoms/Button';
 import { Form, Formik, FormikHelpers, FormikProps } from 'formik';
-import { useRef, useState, useEffect, useMemo } from 'react';
+import { useRef, useState, useEffect, useMemo, useContext } from 'react';
 import { useEffectOnce } from 'usehooks-ts';
 import useAnalyticsEventTracker from 'utils/hooks';
-import { axiosWrapper, catchAsyncToString } from 'utils/util';
+import { axiosWrapper, catchAsyncToString, chooseFile, chooseFiles } from 'utils/util';
 import {
   autoSettingPageObject,
   basicSettingsPageObject,
@@ -27,6 +27,10 @@ import { SetupManifest } from 'bindings/SetupManifest';
 import { SetupValue } from 'bindings/SetupValue';
 import { SectionManifestValue } from 'bindings/SectionManifestValue';
 import { toast } from 'react-toastify';
+import { faUpload } from '@fortawesome/free-solid-svg-icons';
+import { Base64 } from 'js-base64';
+import { getTmpPath, uploadFile } from 'utils/apis';
+import { NotificationContext } from 'data/NotificationContext';
 
 export type GenericHandlerGameType = 'Generic' | HandlerGameType;
 export type FormPage = {
@@ -34,6 +38,8 @@ export type FormPage = {
   description: string;
   page: SetupManifest;
 };
+
+let submitAction: string | undefined = undefined;
 
 export default function InstanceCreateForm({
   onComplete,
@@ -48,14 +54,15 @@ export default function InstanceCreateForm({
   const [setupManifest, setSetupManifest] = useState<SetupManifest | null>(
     null
   );
+  const { ongoingNotifications } = useContext(NotificationContext);
 
   const {
     data: setup_manifest,
     isLoading,
     error,
   } = gameType === 'Generic'
-    ? SetupGenericInstanceManifest(gameType, url, genericFetchReady)
-    : SetupInstanceManifest(gameType as HandlerGameType);
+      ? SetupGenericInstanceManifest(gameType, url, genericFetchReady)
+      : SetupInstanceManifest(gameType as HandlerGameType);
 
   const gaEventTracker = useAnalyticsEventTracker('Create Instance');
   const formikRef =
@@ -150,9 +157,32 @@ export default function InstanceCreateForm({
     }
   };
 
+  const uploadInstance = async (value: SetupValue) => {
+    try {
+      if (gameType === 'Generic') {
+        await axiosWrapper<void>({
+          method: 'post',
+          url: `/instance/create_generic`,
+          headers: { 'Content-Type': 'application/json' },
+          data: JSON.stringify({ url: url, setup_value: value }),
+        });
+      } else {
+        await axiosWrapper<void>({
+          method: 'post',
+          url: `/instance/create/${gameType}`,
+          headers: { 'Content-Type': 'application/json' },
+          data: JSON.stringify(value),
+        });
+      }
+    } catch (e) {
+      toast.error('Error creating instance: ' + e);
+    }
+  };
+
+
   async function submitForm(
     values: Record<string, ConfigurableValue | null>,
-    actions: FormikHelpers<Record<string, ConfigurableValue | null>>
+    actions: FormikHelpers<Record<string, ConfigurableValue | null>>,
   ) {
     const sectionValues = parseValues(values);
 
@@ -164,7 +194,10 @@ export default function InstanceCreateForm({
       setting_sections: sectionValues,
     };
 
-    await createInstance(parsedValues);
+    if (submitAction == "upload")
+      await uploadInstance(parsedValues);
+    else
+      await createInstance(parsedValues);
     actions.setSubmitting(false);
 
     gaEventTracker('Create Instance Complete');
@@ -195,10 +228,22 @@ export default function InstanceCreateForm({
 
   async function handleSubmit(
     values: Record<string, ConfigurableValue | null>,
-    actions: FormikHelpers<Record<string, ConfigurableValue | null>>
+    actions: FormikHelpers<Record<string, ConfigurableValue | null>>,
   ) {
     if (formReady) {
+      if (submitAction === "upload") {
+        const file = await chooseFiles(false);
+        if (!file) {
+          return;
+        }
+        console.log(ongoingNotifications)
+        const fileArray = Array.from(file);
+        const tmpDir = await getTmpPath();
+        uploadFile(tmpDir, fileArray, true);
+        onComplete();
+      }
       submitForm(values, actions);
+      onComplete();
     } else {
       if (setup_manifest) {
         if (activeStep === 0) actions.setValues(initialValues);
@@ -210,7 +255,7 @@ export default function InstanceCreateForm({
   }
 
   function handleBack() {
-    if(activeStep === 1) {
+    if (activeStep === 1) {
       setGenericFetchReady(false);
       setUrlValid(false);
       setUrl('');
@@ -242,14 +287,14 @@ export default function InstanceCreateForm({
         {({ isSubmitting, status }) => (
           <Form
             id={formId}
-            className="flex max-h-[700px] min-h-[560px] w-[812px] rounded-2xl border-2 border-gray-faded/10 bg-gray-850 drop-shadow-lg"
+            className="border-gray-faded/10 bg-gray-850 flex max-h-[700px] min-h-[560px] w-[812px] rounded-2xl border-2 drop-shadow-lg"
           >
             <div className="w-[180px] border-r border-gray-700 pt-8 ">
               {sections.map((section, i) => (
                 <div
                   key={i}
                   className={clsx(
-                    'px-4 py-2 text-left font-sans text-medium font-medium leading-5 tracking-medium text-white/50 ',
+                    'text-medium tracking-medium px-4 py-2 text-left font-sans font-medium leading-5 text-white/50 ',
                     activeStep === i && 'font-extrabold text-white'
                   )}
                 >
@@ -286,12 +331,25 @@ export default function InstanceCreateForm({
                 ) : (
                   <div></div>
                 )}
-                <Button
-                  type="submit"
-                  label={formReady ? 'Create Instance' : 'Next'}
-                  loading={isSubmitting}
-                  disabled={gameType === 'Generic' && !urlValid}
-                />
+                <div className="m-0 flex flex-row p-0">
+                  {formReady &&
+                    <Button
+                      type="submit"
+                      onClick={() => submitAction = "upload"}
+                      iconRight={faUpload}
+                      label="Upload"
+                      loading={isSubmitting}
+                      disabled={gameType === 'Generic' && !urlValid}
+                      className="mr-2"
+                    />
+                  }
+                  <Button
+                    type="submit"
+                    label={formReady ? 'Create Instance' : 'Next'}
+                    loading={isSubmitting}
+                    disabled={gameType === 'Generic' && !urlValid}
+                  />
+                </div>
               </div>
             </div>
           </Form>
