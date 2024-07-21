@@ -157,23 +157,18 @@ export default function InstanceCreateForm({
     }
   };
 
-  const uploadInstance = async (value: SetupValue) => {
+  const uploadInstance = async (value: SetupValue, path: string) => {
+    path = Base64.encode(path, true)
+    console.log(path, Base64.decode(path))
+
+
     try {
-      if (gameType === 'Generic') {
-        await axiosWrapper<void>({
-          method: 'post',
-          url: `/instance/create_generic`,
-          headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify({ url: url, setup_value: value }),
-        });
-      } else {
-        await axiosWrapper<void>({
-          method: 'post',
-          url: `/instance/create/${gameType}`,
-          headers: { 'Content-Type': 'application/json' },
-          data: JSON.stringify(value),
-        });
-      }
+      await axiosWrapper<void>({
+        method: 'post',
+        url: `/instance/create_from_zip/${gameType}/${path}`,
+        headers: { 'Content-Type': 'application/json' },
+        data: JSON.stringify(value),
+      });
     } catch (e) {
       toast.error('Error creating instance: ' + e);
     }
@@ -183,6 +178,7 @@ export default function InstanceCreateForm({
   async function submitForm(
     values: Record<string, ConfigurableValue | null>,
     actions: FormikHelpers<Record<string, ConfigurableValue | null>>,
+    path: string | null = null
   ) {
     const sectionValues = parseValues(values);
 
@@ -194,8 +190,8 @@ export default function InstanceCreateForm({
       setting_sections: sectionValues,
     };
 
-    if (submitAction == "upload")
-      await uploadInstance(parsedValues);
+    if (submitAction == "upload" && path)
+      await uploadInstance(parsedValues, path);
     else
       await createInstance(parsedValues);
     actions.setSubmitting(false);
@@ -236,14 +232,18 @@ export default function InstanceCreateForm({
         if (!file) {
           return;
         }
-        console.log(ongoingNotifications)
         const fileArray = Array.from(file);
         const tmpDir = await getTmpPath();
+        let directorySeparator = '\\';
+        // assume only linux paths contain /
+        if (tmpDir.includes('/')) directorySeparator = '/';
         uploadFile(tmpDir, fileArray, true);
+        submitForm(values, actions, tmpDir + directorySeparator + fileArray[0].name);
+        onComplete();
+      } else {
+        submitForm(values, actions);
         onComplete();
       }
-      submitForm(values, actions);
-      onComplete();
     } else {
       if (setup_manifest) {
         if (activeStep === 0) actions.setValues(initialValues);

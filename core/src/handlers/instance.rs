@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use axum::routing::{delete, get, post};
 use axum::Router;
 use axum::{extract::Path, Json};
@@ -22,9 +24,11 @@ use crate::traits::t_configurable::manifest::SetupValue;
 use crate::traits::t_configurable::Game::Generic;
 use crate::traits::{t_configurable::TConfigurable, t_server::TServer, InstanceInfo, TInstance};
 use crate::types::{DotLodestoneConfig, InstanceUuid};
+use crate::util::{unzip_file, unzip_file_async, UnzipOption};
 use crate::{implementations::minecraft, traits::t_server::State, AppState};
 
 use super::instance_setup_configs::HandlerGameType;
+use super::util::decode_base64;
 
 pub async fn get_instance_list(
     axum::extract::State(state): axum::extract::State<AppState>,
@@ -67,12 +71,147 @@ pub async fn get_instance_info(
     Ok(Json(instance.get_instance_info().await))
 }
 
+pub async fn create_minecraft_instance_from_zip(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    AuthBearer(token): AuthBearer,
+    Path((game_type, base64_absolute_path)): Path<(HandlerGameType, String)>,
+    Json(manifest_value): Json<SetupValue>,
+) -> Result<Json<InstanceUuid>, Error> {
+    let zip_path = decode_base64(&base64_absolute_path)?;
+    let requester = state.users_manager.read().await.try_auth_or_err(&token)?;
+    requester.try_action(
+        &UserAction::CreateInstance,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
+    let mut perm = requester.permissions;
+
+    let mut instance_uuid = InstanceUuid::default();
+
+    for entry in state.instances.iter() {
+        if let Some(uuid) = entry.key().as_ref().get(0..8) {
+            if uuid == &instance_uuid.no_prefix()[0..8] {
+                instance_uuid = InstanceUuid::default();
+            }
+        }
+    }
+
+    let instance_uuid = instance_uuid;
+
+    let flavour = game_type.try_into()?;
+
+    let setup_config = MinecraftInstance::construct_setup_config(manifest_value, flavour).await?;
+
+    let setup_path = path_to_instances().join(format!(
+        "{}-{}",
+        setup_config.name,
+        &instance_uuid.no_prefix()[0..8]
+    ));
+
+    tokio::fs::create_dir_all(&setup_path)
+        .await
+        .context("Failed to create instance directory")?;
+
+    let zip = PathBuf::from(&zip_path);
+
+    unzip_file_async(&zip, UnzipOption::ToDir(setup_path.clone()))
+        .await
+        .context("Failed to unzip given file")?;
+
+    let dot_lodestone_config = DotLodestoneConfig::new(instance_uuid.clone(), game_type.into());
+
+    // write dot lodestone config
+
+    tokio::fs::write(
+        setup_path.join(".lodestone_config"),
+        serde_json::to_string_pretty(&dot_lodestone_config).unwrap(),
+    )
+    .await
+    .context("Failed to write .lodestone_config file")?;
+
+    tokio::task::spawn({
+        let uuid = instance_uuid.clone();
+        let instance_name = setup_config.name.clone();
+        let event_broadcaster = state.event_broadcaster.clone();
+        let caused_by = CausedBy::User {
+            user_id: requester.uid.clone(),
+            user_name: requester.username.clone(),
+        };
+        async move {
+            let (progression_start_event, event_id) = Event::new_progression_event_start(
+                format!("Setting up Minecraft server {instance_name}"),
+                Some(10.0),
+                Some(ProgressionStartValue::InstanceCreation {
+                    instance_uuid: uuid.clone(),
+                }),
+                caused_by,
+            );
+            event_broadcaster.send(progression_start_event);
+            let minecraft_instance = match minecraft::MinecraftInstance::restore(
+                setup_path.clone(),
+                dot_lodestone_config,
+                state.event_broadcaster.clone(),
+                state.macro_executor.clone(),
+            )
+            .await
+            {
+                Ok(v) => {
+                    event_broadcaster.send(Event::new_progression_event_end(
+                        event_id,
+                        true,
+                        Some("Instance created successfully"),
+                        Some(ProgressionEndValue::InstanceCreation(
+                            v.get_instance_info().await,
+                        )),
+                    ));
+                    v
+                }
+                Err(e) => {
+                    event_broadcaster.send(Event::new_progression_event_end(
+                        event_id,
+                        false,
+                        Some(&format!("Instance creation failed: {e}")),
+                        None,
+                    ));
+                    crate::util::fs::remove_dir_all(setup_path)
+                        .await
+                        .context("Failed to remove directory after instance creation failed")
+                        .unwrap();
+                    return;
+                }
+            };
+            let mut port_manager = state.port_manager.lock().await;
+            port_manager.add_port(setup_config.port);
+            perm.can_start_instance.insert(uuid.clone());
+            perm.can_stop_instance.insert(uuid.clone());
+            perm.can_view_instance.insert(uuid.clone());
+            perm.can_read_instance_file.insert(uuid.clone());
+            perm.can_write_instance_file.insert(uuid.clone());
+            // ignore errors since we don't care if the permissions update fails
+            let _ = state
+                .users_manager
+                .write()
+                .await
+                .update_permissions(&requester.uid, perm, CausedBy::System)
+                .await
+                .map_err(|e| {
+                    error!("Failed to update permissions: {:?}", e);
+                    e
+                });
+            state
+                .instances
+                .insert(uuid.clone(), minecraft_instance.into());
+        }
+    });
+    Ok(Json(instance_uuid))
+}
+
 pub async fn create_minecraft_instance(
     axum::extract::State(state): axum::extract::State<AppState>,
     AuthBearer(token): AuthBearer,
     Path(game_type): Path<HandlerGameType>,
     Json(manifest_value): Json<SetupValue>,
 ) -> Result<Json<InstanceUuid>, Error> {
+    println!("wowie");
     let requester = state.users_manager.read().await.try_auth_or_err(&token)?;
     requester.try_action(
         &UserAction::CreateInstance,
@@ -398,6 +537,10 @@ pub fn get_instance_routes(state: AppState) -> Router {
         .route(
             "/instance/create/:game_type",
             post(create_minecraft_instance),
+        )
+        .route(
+            "/instance/create_from_zip/:game_type/:base64_absolute_path",
+            post(create_minecraft_instance_from_zip),
         )
         .route("/instance/create_generic", post(create_generic_instance))
         .route("/instance/:uuid", delete(delete_instance))

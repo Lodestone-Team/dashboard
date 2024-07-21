@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use axum::{
     body::{Bytes, StreamBody},
-    extract::{Multipart, Path},
+    extract::{DefaultBodyLimit, Multipart, Path},
     http,
     routing::{delete, get, put},
     Json, Router,
@@ -103,6 +103,12 @@ impl From<&std::path::Path> for FileEntry {
     }
 }
 
+#[derive(Deserialize)]
+struct UploadFilePathParams {
+    base64_absolute_path: String,
+    overwrite: Option<String>,
+}
+
 async fn list_files(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(base64_absolute_path): Path<String>,
@@ -119,7 +125,10 @@ async fn list_files(
             source: eyre!("Token error"),
         })?;
 
-    requester.try_action(&UserAction::ReadGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::ReadGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
     let caused_by = CausedBy::User {
@@ -158,7 +167,10 @@ async fn read_file(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::ReadGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::ReadGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
     let ret = tokio::fs::read_to_string(&path).await.context(
@@ -178,6 +190,19 @@ async fn read_file(
     Ok(ret)
 }
 
+async fn get_tmp_path(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    AuthBearer(token): AuthBearer,
+) -> Result<Json<String>, Error> {
+    let tmp_path = path_to_tmp()
+        .clone()
+        .into_os_string()
+        .into_string()
+        .expect("Failed to get path to tmp directory");
+
+    Ok(Json(tmp_path))
+}
+
 async fn write_file(
     axum::extract::State(state): axum::extract::State<AppState>,
     Path(base64_absolute_path): Path<String>,
@@ -195,7 +220,10 @@ async fn write_file(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
 
@@ -231,7 +259,10 @@ async fn make_directory(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
     tokio::fs::create_dir(&path).await.context(format!(
@@ -271,7 +302,10 @@ async fn move_file(
             source: eyre!("Token error"),
         })?;
 
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     crate::util::fs::rename(&path_source, &path_dest).await?;
 
@@ -306,7 +340,10 @@ async fn remove_file(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
 
@@ -341,7 +378,10 @@ async fn remove_dir(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
 
@@ -377,7 +417,10 @@ async fn new_file(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
 
     let path = PathBuf::from(absolute_path);
 
@@ -413,7 +456,10 @@ async fn download_file(
             kind: ErrorKind::Unauthorized,
             source: eyre!("Token error"),
         })?;
-    requester.try_action(&UserAction::ReadGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::ReadGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
     let path = PathBuf::from(absolute_path);
     let downloadable_file_path: PathBuf;
     let downloadable_file = if fs::metadata(path.clone()).unwrap().is_dir() {
@@ -452,7 +498,10 @@ async fn download_file(
 
 async fn upload_file(
     axum::extract::State(state): axum::extract::State<AppState>,
-    Path(base64_absolute_path): Path<String>,
+    Path(UploadFilePathParams {
+        base64_absolute_path,
+        overwrite,
+    }): Path<UploadFilePathParams>,
     headers: HeaderMap,
     AuthBearer(token): AuthBearer,
     mut multipart: Multipart,
@@ -468,7 +517,15 @@ async fn upload_file(
             source: eyre!("Token error"),
         })?;
 
-    requester.try_action(&UserAction::WriteGlobalFile, state.global_settings.lock().await.safe_mode())?;
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
+
+    let overwrite = match overwrite {
+        Some(should_overwrite) => should_overwrite == "overwrite",
+        None => false,
+    };
 
     let path_to_dir = PathBuf::from(absolute_path);
 
@@ -504,7 +561,7 @@ async fn upload_file(
             })?
             .to_owned();
         let path = path_to_dir.join(&name);
-        let path = if path.exists() {
+        let path = if path.exists() && !overwrite {
             // add a postfix to the file name
             let mut postfix = 1;
             // get the file name without the extension
@@ -574,7 +631,7 @@ async fn upload_file(
         .send(Event::new_progression_event_end(
             event_id,
             true,
-            Some("Upload complete"),
+            Some("Upload complete: "),
             None,
         ));
 
@@ -651,6 +708,13 @@ pub fn get_global_fs_routes(state: AppState) -> Router {
         .route("/fs/:base64_absolute_path/new", put(new_file))
         .route("/fs/:base64_absolute_path/download", get(download_file))
         .route("/fs/:base64_absolute_path/upload", put(upload_file))
+        .layer(DefaultBodyLimit::disable())
+        .route(
+            "/fs/:base64_absolute_path/upload/:overwrite",
+            put(upload_file),
+        )
+        .layer(DefaultBodyLimit::disable())
+        .route("/fs/tmp_path", get(get_tmp_path))
         .route("/file/:key", get(download))
         .with_state(state)
 }

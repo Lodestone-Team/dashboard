@@ -50,7 +50,6 @@ export const uploadFile = async (
     formData.append('file', f);
   });
   toast.info(`Uploading ${file.length} ${file.length > 1 ? 'files' : 'file'}`);
-  console.log(`/fs/${Base64.encode(directory, true)}/upload` + (overwrite ? "/overwrite" : ""))
   const error = await catchAsyncToString(
     axiosWrapper<null>({
       method: 'put',
