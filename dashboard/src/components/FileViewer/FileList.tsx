@@ -121,6 +121,11 @@ export default function FileList({
     x: 0,
     y: 0,
   });
+  const [sortUpdate, setSortUpdate] = useState(false);
+  const [sortKey, setSortKey] = useState<{ key: string, direction: number}>({
+    key: '',
+    direction: -1 // 1 for asc, -1 for desc
+  })
   const [showContextMenu, setShowContextMenu] = useState(false);
   const [contextMenuCoords, setContextMenuCoords] = useState({ x: 0, y: 0 });
   const [contextMenuFile, setContextMenuFile] = useState<ClientFile | null>();
@@ -150,6 +155,31 @@ export default function FileList({
       });
     }
   }, []);
+
+  useEffect(() => {
+    if (sortKey.key == '') return;
+    fileList?.sort((a, b) => {
+        const { direction, key } = sortKey;
+        
+        // group directories together
+        if (a.file_type === 'Directory' && b.file_type !== 'Directory') return -1 * direction;
+        if (a.file_type !== 'Directory' && b.file_type === 'Directory') return 1 * direction;
+        
+        const compare = (val1: string | number | null, val2: string | number | null) => {
+            if (!val1) return -1;
+            if (!val2) return 1;
+            return val1 < val2 ? -1 : 1;
+        };
+
+        let result = 0;
+        if (key === 'name') result = compare(a.name, b.name);
+        else if (key === 'date_modified') result = compare(a.modification_time, b.modification_time);
+        else if (key === 'size') result = compare(a.size, b.size);
+        return direction === 1 ? result : -result;
+    });
+    setSortUpdate(!sortUpdate);
+
+  }, [sortKey, fileList]);
 
   const onMouseMove = (e: MouseEvent) => {
     setMousePos({ x: e.clientX - absCoords.x, y: e.clientY - absCoords.y });
@@ -314,6 +344,21 @@ export default function FileList({
             </p>
           </div>
         )}
+        <div className='text-medium flex w-full flex-row font-medium text-gray-400'>
+            <p className='py-2 pl-11 hover:cursor-pointer' 
+                onClick={() => setSortKey({ key: 'name', direction: sortKey.direction * -1})}>
+                Name
+            </p>
+            <div className="grow"></div>
+            <p className='min-w-[8ch] py-2 pr-8 text-right hover:cursor-pointer' 
+                onClick={() => setSortKey({ key: 'date_modified', direction: sortKey.direction * -1})}>
+                Date modified
+            </p>
+            <p className='min-w-[8ch] py-2 pr-4 text-right hover:cursor-pointer'
+                onClick={() => setSortKey({ key: 'size', direction: sortKey.direction * -1})}>
+                Size
+            </p>
+        </div>
         {fileList?.map((file: ClientFile) => (
           <div
             key={file.path}
@@ -353,9 +398,7 @@ export default function FileList({
 
             <p className="hidden min-w-[8ch] text-left text-gray-500 @xs:inline">
               {file.modification_time || file.creation_time
-                ? formatTimeAgo(
-                    Number(file.modification_time ?? file.creation_time) * 1000
-                  )
+                ? formatTimeAgo(Number(file.modification_time ?? file.creation_time) * 1000)
                 : 'Unknown Creation Time'}
             </p>
 
