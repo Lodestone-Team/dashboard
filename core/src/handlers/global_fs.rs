@@ -496,12 +496,114 @@ async fn download_file(
     Ok(key)
 }
 
+async fn upload_tmp_file(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    headers: HeaderMap,
+    AuthBearer(token): AuthBearer,
+    mut multipart: Multipart,
+) -> Result<Json<()>, Error> {
+    let requester = state
+        .users_manager
+        .read()
+        .await
+        .try_auth(&token)
+        .ok_or_else(|| Error {
+            kind: ErrorKind::Unauthorized,
+            source: eyre!("Token error"),
+        })?;
+
+    requester.try_action(
+        &UserAction::WriteGlobalFile,
+        state.global_settings.lock().await.safe_mode(),
+    )?;
+
+    let tmp_path = path_to_tmp().clone();
+
+    let total = headers
+        .get(CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<f64>().ok());
+
+    let (progression_start_event, event_id) = Event::new_progression_event_start(
+        "Uploading file(s)",
+        total,
+        None,
+        CausedBy::User {
+            user_id: requester.uid.clone(),
+            user_name: requester.username.clone(),
+        },
+    );
+    state.event_broadcaster.send(progression_start_event);
+
+    while let Ok(Some(mut field)) = multipart.next_field().await {
+        let name = field
+            .file_name()
+            .ok_or_else(|| Error {
+                kind: ErrorKind::BadRequest,
+                source: eyre!("Missing file name"),
+            })?
+            .to_owned();
+        let path = tmp_path.join(&name);
+        let mut file = tokio::fs::File::create(&path)
+            .await
+            .context(format!("Failed to create file {}", path.display()))?;
+
+        while let Some(chunk) = match field.chunk().await {
+            Ok(v) => v,
+            Err(e) => {
+                tokio::fs::remove_file(&path).await.ok();
+                state
+                    .event_broadcaster
+                    .send(Event::new_progression_event_end(
+                        event_id,
+                        false,
+                        Some(&e.to_string()),
+                        None,
+                    ));
+                return Err(Error {
+                    kind: ErrorKind::BadRequest,
+                    source: eyre!("Failed to read chunk: {}", e),
+                });
+            }
+        } {
+            state
+                .event_broadcaster
+                .send(Event::new_progression_event_update(
+                    &event_id,
+                    format!("Uploading {name}"),
+                    chunk.len() as f64,
+                ));
+            file.write_all(&chunk).await.map_err(|_| {
+                std::fs::remove_file(&path).ok();
+                eyre!("Failed to write chunk")
+            })?;
+        }
+
+        let caused_by = CausedBy::User {
+            user_id: requester.uid.clone(),
+            user_name: requester.username.clone(),
+        };
+        state.event_broadcaster.send(new_fs_event(
+            FSOperation::Upload,
+            FSTarget::File(path),
+            caused_by,
+        ));
+    }
+    state
+        .event_broadcaster
+        .send(Event::new_progression_event_end(
+            event_id,
+            true,
+            Some("Upload complete: "),
+            None,
+        ));
+
+    Ok(Json(()))
+}
+
 async fn upload_file(
     axum::extract::State(state): axum::extract::State<AppState>,
-    Path(UploadFilePathParams {
-        base64_absolute_path,
-        overwrite,
-    }): Path<UploadFilePathParams>,
+    Path(base64_absolute_path): Path<String>,
     headers: HeaderMap,
     AuthBearer(token): AuthBearer,
     mut multipart: Multipart,
@@ -521,11 +623,6 @@ async fn upload_file(
         &UserAction::WriteGlobalFile,
         state.global_settings.lock().await.safe_mode(),
     )?;
-
-    let overwrite = match overwrite {
-        Some(should_overwrite) => should_overwrite == "overwrite",
-        None => false,
-    };
 
     let path_to_dir = PathBuf::from(absolute_path);
 
@@ -561,7 +658,7 @@ async fn upload_file(
             })?
             .to_owned();
         let path = path_to_dir.join(&name);
-        let path = if path.exists() && !overwrite {
+        let path = if path.exists() {
             // add a postfix to the file name
             let mut postfix = 1;
             // get the file name without the extension
@@ -709,10 +806,7 @@ pub fn get_global_fs_routes(state: AppState) -> Router {
         .route("/fs/:base64_absolute_path/download", get(download_file))
         .route("/fs/:base64_absolute_path/upload", put(upload_file))
         .layer(DefaultBodyLimit::disable())
-        .route(
-            "/fs/:base64_absolute_path/upload/:overwrite",
-            put(upload_file),
-        )
+        .route("/fs/upload_tmp", put(upload_tmp_file))
         .layer(DefaultBodyLimit::disable())
         .route("/fs/tmp_path", get(get_tmp_path))
         .route("/file/:key", get(download))

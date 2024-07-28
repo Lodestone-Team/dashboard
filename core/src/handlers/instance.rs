@@ -9,6 +9,7 @@ use bollard::container::ListContainersOptions;
 use bollard::Docker;
 use color_eyre::eyre::{eyre, Context};
 use serde::Deserialize;
+use serde_json::to_string_pretty;
 use tracing::{error, info};
 
 use crate::auth::user::UserAction;
@@ -16,10 +17,11 @@ use crate::error::{Error, ErrorKind};
 use crate::events::{CausedBy, Event, ProgressionEndValue, ProgressionStartValue};
 
 use crate::implementations::generic;
+use crate::implementations::minecraft::util::get_jre_url;
 use crate::traits::t_configurable::GameType;
 
-use crate::implementations::minecraft::MinecraftInstance;
-use crate::prelude::{path_to_instances, GameInstance};
+use crate::implementations::minecraft::{MinecraftInstance, RestoreConfig};
+use crate::prelude::{path_to_binaries, path_to_instances, path_to_tmp, GameInstance};
 use crate::traits::t_configurable::manifest::SetupValue;
 use crate::traits::t_configurable::Game::Generic;
 use crate::traits::{t_configurable::TConfigurable, t_server::TServer, InstanceInfo, TInstance};
@@ -74,10 +76,10 @@ pub async fn get_instance_info(
 pub async fn create_minecraft_instance_from_zip(
     axum::extract::State(state): axum::extract::State<AppState>,
     AuthBearer(token): AuthBearer,
-    Path((game_type, base64_absolute_path)): Path<(HandlerGameType, String)>,
+    Path((game_type, filename)): Path<(HandlerGameType, String)>,
     Json(manifest_value): Json<SetupValue>,
 ) -> Result<Json<InstanceUuid>, Error> {
-    let zip_path = decode_base64(&base64_absolute_path)?;
+    let zip_name = decode_base64(&filename)?;
     let requester = state.users_manager.read().await.try_auth_or_err(&token)?;
     requester.try_action(
         &UserAction::CreateInstance,
@@ -111,13 +113,15 @@ pub async fn create_minecraft_instance_from_zip(
         .await
         .context("Failed to create instance directory")?;
 
-    let zip = PathBuf::from(&zip_path);
+    let tmp_path = path_to_tmp().clone();
+    let zip = tmp_path.join(zip_name);
 
     unzip_file_async(&zip, UnzipOption::ToDir(setup_path.clone()))
         .await
         .context("Failed to unzip given file")?;
 
     let dot_lodestone_config = DotLodestoneConfig::new(instance_uuid.clone(), game_type.into());
+    let path_to_config = setup_path.join(".lodestone_minecraft_config.json");
 
     // write dot lodestone config
 
@@ -127,6 +131,57 @@ pub async fn create_minecraft_instance_from_zip(
     )
     .await
     .context("Failed to write .lodestone_config file")?;
+
+    let res = get_jre_url(setup_config.version.as_str()).await;
+
+    let (_, jre_major_version) = if let Some((url, jre_major_version)) = res {
+        (url, jre_major_version)
+    } else {
+        return Err(Error {
+            kind: ErrorKind::BadRequest,
+            source: eyre!("Invalid server"),
+        });
+    };
+
+    let path_to_runtimes = path_to_binaries().to_owned();
+    let jre = path_to_runtimes
+        .join("java")
+        .join(format!("jre{}", jre_major_version))
+        .join(if std::env::consts::OS == "macos" {
+            "Contents/Home/bin"
+        } else {
+            "bin"
+        })
+        .join("java");
+
+    let restore_config = RestoreConfig {
+        name: setup_config.name.clone(),
+        version: setup_config.version,
+        flavour: flavour.into(),
+        description: setup_config.description.unwrap_or_default(),
+        cmd_args: setup_config.cmd_args,
+        port: setup_config.port,
+        min_ram: setup_config.min_ram.unwrap_or(2048),
+        max_ram: setup_config.max_ram.unwrap_or(4096),
+        auto_start: setup_config.auto_start.unwrap_or(false),
+        restart_on_crash: setup_config.restart_on_crash.unwrap_or(false),
+        backup_period: setup_config.backup_period,
+        jre_major_version,
+        has_started: false,
+        java_cmd: Some(jre.to_string_lossy().to_string()),
+    };
+
+    // create config file
+    tokio::fs::write(
+        &path_to_config,
+        to_string_pretty(&restore_config)
+            .context("Failed to serialize config to string. This is a bug, please report it.")?,
+    )
+    .await
+    .context(format!(
+        "Failed to write config file at {}",
+        &path_to_config.display()
+    ))?;
 
     tokio::task::spawn({
         let uuid = instance_uuid.clone();

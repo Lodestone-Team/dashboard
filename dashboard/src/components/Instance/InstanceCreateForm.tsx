@@ -3,7 +3,7 @@ import { Form, Formik, FormikHelpers, FormikProps } from 'formik';
 import { useRef, useState, useEffect, useMemo, useContext } from 'react';
 import { useEffectOnce } from 'usehooks-ts';
 import useAnalyticsEventTracker from 'utils/hooks';
-import { axiosWrapper, catchAsyncToString, chooseFile, chooseFiles } from 'utils/util';
+import { axiosWrapper, chooseFiles } from 'utils/util';
 import {
   autoSettingPageObject,
   basicSettingsPageObject,
@@ -29,7 +29,7 @@ import { SectionManifestValue } from 'bindings/SectionManifestValue';
 import { toast } from 'react-toastify';
 import { faUpload } from '@fortawesome/free-solid-svg-icons';
 import { Base64 } from 'js-base64';
-import { getTmpPath, uploadFile } from 'utils/apis';
+import { uploadTmpFile } from 'utils/apis';
 import { NotificationContext } from 'data/NotificationContext';
 
 export type GenericHandlerGameType = 'Generic' | HandlerGameType;
@@ -157,15 +157,13 @@ export default function InstanceCreateForm({
     }
   };
 
-  const uploadInstance = async (value: SetupValue, path: string) => {
-    path = Base64.encode(path, true)
-    console.log(path, Base64.decode(path))
-
+  const uploadInstance = async (value: SetupValue, filename: string) => {
+    filename = Base64.encode(filename, true)
 
     try {
       await axiosWrapper<void>({
         method: 'post',
-        url: `/instance/create_from_zip/${gameType}/${path}`,
+        url: `/instance/create_from_zip/${gameType}/${filename}`,
         headers: { 'Content-Type': 'application/json' },
         data: JSON.stringify(value),
       });
@@ -178,7 +176,7 @@ export default function InstanceCreateForm({
   async function submitForm(
     values: Record<string, ConfigurableValue | null>,
     actions: FormikHelpers<Record<string, ConfigurableValue | null>>,
-    path: string | null = null
+    server_name: string | null = null
   ) {
     const sectionValues = parseValues(values);
 
@@ -190,8 +188,8 @@ export default function InstanceCreateForm({
       setting_sections: sectionValues,
     };
 
-    if (submitAction == "upload" && path)
-      await uploadInstance(parsedValues, path);
+    if (submitAction == "upload" && server_name)
+      await uploadInstance(parsedValues, server_name);
     else
       await createInstance(parsedValues);
     actions.setSubmitting(false);
@@ -233,12 +231,8 @@ export default function InstanceCreateForm({
           return;
         }
         const fileArray = Array.from(file);
-        const tmpDir = await getTmpPath();
-        let directorySeparator = '\\';
-        // assume only linux paths contain /
-        if (tmpDir.includes('/')) directorySeparator = '/';
-        uploadFile(tmpDir, fileArray, true);
-        submitForm(values, actions, tmpDir + directorySeparator + fileArray[0].name);
+        await uploadTmpFile(fileArray);
+        submitForm(values, actions, fileArray[0].name);
         onComplete();
       } else {
         submitForm(values, actions);
@@ -345,6 +339,7 @@ export default function InstanceCreateForm({
                   }
                   <Button
                     type="submit"
+                    onClick={() => submitAction = undefined}
                     label={formReady ? 'Create Instance' : 'Next'}
                     loading={isSubmitting}
                     disabled={gameType === 'Generic' && !urlValid}

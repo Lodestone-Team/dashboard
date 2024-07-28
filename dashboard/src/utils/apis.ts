@@ -39,10 +39,8 @@ export const getTmpPath = async () => {
   return tmpPath;
 };
 
-export const uploadFile = async (
-  directory: string,
+export const uploadTmpFile = async (
   file: Array<File>,
-  overwrite = false,
 ) => {
   // upload all files using multipart form data
   const formData = new FormData();
@@ -53,7 +51,34 @@ export const uploadFile = async (
   const error = await catchAsyncToString(
     axiosWrapper<null>({
       method: 'put',
-      url: `/fs/${Base64.encode(directory, true)}/upload` + (overwrite ? "/overwrite" : ""),
+      url: '/fs/upload_tmp',
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 0,
+    })
+  );
+  if (error) {
+    toast.error(error);
+    return;
+  }
+};
+
+export const uploadFile = async (
+  directory: string,
+  file: Array<File>,
+) => {
+  // upload all files using multipart form data
+  const formData = new FormData();
+  file.forEach((f) => {
+    formData.append('file', f);
+  });
+  toast.info(`Uploading ${file.length} ${file.length > 1 ? 'files' : 'file'}`);
+  const error = await catchAsyncToString(
+    axiosWrapper<null>({
+      method: 'put',
+      url: `/fs/${Base64.encode(directory, true)}/upload`,
       data: formData,
       headers: {
         'Content-Type': 'multipart/form-data',
