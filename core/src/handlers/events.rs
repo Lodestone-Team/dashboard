@@ -287,6 +287,30 @@ async fn console_stream_ws(
     }
 }
 
+pub async fn clear_console_buffer(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    AuthBearer(token): AuthBearer,
+    Path(uuid): Path<InstanceUuid>,
+) -> Result<Json<()>, Error> {
+    let requester = state
+        .users_manager
+        .read()
+        .await
+        .try_auth(&token)
+        .ok_or_else(|| Error {
+            kind: ErrorKind::Unauthorized,
+            source: eyre!("Token error"),
+        })?;
+    if !requester.can_perform_action(&UserAction::ClearConsoleBuffer(uuid.clone())) {
+        return Err(Error {
+            kind: ErrorKind::PermissionDenied,
+            source: eyre!("You don't have permission to clear the console buffer"),
+        });
+    }
+    state.clear_console_buffer(&uuid).await;
+    Ok(Json(()))
+}
+
 pub fn get_events_routes(state: AppState) -> Router {
     Router::new()
         .route("/events/:uuid/stream", get(event_stream))
@@ -294,5 +318,6 @@ pub fn get_events_routes(state: AppState) -> Router {
         .route("/events/search", get(get_event_search))
         .route("/instance/:uuid/console/stream", get(console_stream))
         .route("/instance/:uuid/console/buffer", get(get_console_buffer))
+        .route("/instance/:uuid/console/clear", get(clear_console_buffer))
         .with_state(state)
 }

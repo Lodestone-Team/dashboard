@@ -133,6 +133,10 @@ impl AppState {
             });
         }
     }
+
+    pub async fn clear_console_buffer(&self, uuid: &InstanceUuid) {
+        self.console_out_buffer.lock().await.remove(uuid);
+    }
 }
 
 async fn restore_instances(
