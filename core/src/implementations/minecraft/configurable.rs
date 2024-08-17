@@ -276,6 +276,7 @@ pub(super) enum CmdArgSetting {
     MinRam(u32),
     MaxRam(u32),
     JavaCmd(String),
+    CustomCmd(String),
     Args(Vec<String>),
 }
 
@@ -288,6 +289,7 @@ impl CmdArgSetting {
             CmdArgSetting::MinRam(_) => "min_ram",
             CmdArgSetting::MaxRam(_) => "max_ram",
             CmdArgSetting::JavaCmd(_) => "java_cmd",
+            CmdArgSetting::CustomCmd(_) => "custom_cmd",
             CmdArgSetting::Args(_) => "cmd_args",
         }
     }
@@ -296,6 +298,7 @@ impl CmdArgSetting {
             CmdArgSetting::MinRam(_) => "Minimum RAM",
             CmdArgSetting::MaxRam(_) => "Maximum RAM",
             CmdArgSetting::JavaCmd(_) => "Java command",
+            CmdArgSetting::CustomCmd(_) => "Custom command",
             CmdArgSetting::Args(_) => "Command line arguments",
         }
     }
@@ -308,6 +311,7 @@ impl CmdArgSetting {
                 "The maximum amount of RAM to allocate to the server instance"
             }
             CmdArgSetting::JavaCmd(_) => "The command to use to run the java executable",
+            CmdArgSetting::CustomCmd(_) => "A custom command to use instead of the Java command",
             CmdArgSetting::Args(_) => "The command line arguments to pass to the server",
         }
     }
@@ -320,6 +324,7 @@ impl CmdArgSetting {
                 val.parse().context("Invalid value. Expected a u32")?,
             )),
             "java_cmd" => Ok(CmdArgSetting::JavaCmd(val.to_string())),
+            "custom_cmd" => Ok(CmdArgSetting::CustomCmd(val.to_string())),
             "cmd_args" => Ok(CmdArgSetting::Args(
                 val.split(' ').map(|s| s.to_string()).collect(),
             )),
@@ -330,7 +335,10 @@ impl CmdArgSetting {
         }
     }
     pub fn is_key_valid(key: &str) -> bool {
-        matches!(key, "min_ram" | "max_ram" | "java_cmd" | "cmd_args")
+        matches!(
+            key,
+            "min_ram" | "max_ram" | "java_cmd" | "cmd_args" | "custom_cmd"
+        )
     }
 }
 
@@ -373,6 +381,16 @@ impl From<CmdArgSetting> for SettingManifest {
                 false,
                 true,
             ),
+            CmdArgSetting::CustomCmd(ref custom_cmd) => SettingManifest::new_optional_value(
+                value.get_identifier().to_owned(),
+                value.get_name().to_owned(),
+                value.get_description().to_owned(),
+                Some(ConfigurableValue::String(custom_cmd.to_owned())),
+                ConfigurableValueType::String { regex: None },
+                None,
+                false,
+                true,
+            ),
             CmdArgSetting::Args(ref args) => SettingManifest::new_optional_value(
                 value.get_identifier().to_owned(),
                 value.get_name().to_owned(),
@@ -405,6 +423,13 @@ impl TryFrom<SettingManifest> for CmdArgSetting {
                     .try_as_integer()? as u32,
             )),
             "java_cmd" => Ok(CmdArgSetting::JavaCmd(
+                value
+                    .get_value()
+                    .context("Expected a value")?
+                    .try_as_string()?
+                    .to_owned(),
+            )),
+            "custom_cmd" => Ok(CmdArgSetting::CustomCmd(
                 value
                     .get_value()
                     .context("Expected a value")?
