@@ -113,11 +113,11 @@ impl TServer for MinecraftInstance {
                 .join("java")
         };
 
-        let server_start_command = if config.custom_cmd.is_none()
+        let mut server_start_command = if config.custom_cmd.is_none()
             || (config.custom_cmd.is_some() && config.custom_cmd.clone().unwrap().is_empty())
         {
             let mut server_start_command = Command::new(&jre);
-            let server_start_command = server_start_command
+            server_start_command
                 .arg(format!("-Xmx{}M", config.max_ram))
                 .arg(format!("-Xms{}M", config.min_ram))
                 .args(
@@ -128,7 +128,7 @@ impl TServer for MinecraftInstance {
                         .collect::<Vec<&String>>(),
                 );
 
-            let server_start_command = match &config.flavour {
+            match &config.flavour {
                 Flavour::Forge { build_version } => {
                     let ForgeBuildVersion(build_version) = build_version
                         .as_ref()
@@ -203,7 +203,7 @@ impl TServer for MinecraftInstance {
                     .arg(&self.path_to_instance.join("server.jar")),
             };
 
-            let server_start_command = server_start_command.arg("nogui");
+            server_start_command.arg("nogui");
 
             server_start_command
         } else {
@@ -214,7 +214,7 @@ impl TServer for MinecraftInstance {
                 .map(|c| String::from(c))
                 .collect();
             let mut server_start_command = Command::new(args.remove(0));
-            let server_start_command = server_start_command.args(
+            server_start_command.args(
                 &config
                     .cmd_args
                     .iter()
@@ -224,9 +224,9 @@ impl TServer for MinecraftInstance {
             server_start_command
         };
 
-        let server_start_command = server_start_command.current_dir(&self.path_to_instance);
+        server_start_command.current_dir(&self.path_to_instance);
 
-        match dont_spawn_terminal(server_start_command)
+        match dont_spawn_terminal(&mut server_start_command)
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .stderr(Stdio::piped())
