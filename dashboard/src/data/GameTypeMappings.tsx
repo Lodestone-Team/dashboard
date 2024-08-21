@@ -39,6 +39,7 @@ export const game_to_game_icon = (game: Game) =>
             Fabric: () => '/assets/minecraft-fabric.png',
             Forge: () => '/assets/minecraft-forge.png',
             Paper: () => '/assets/minecraft-paper.png',
+              Neoforge: () => '/assets/minecraft-neoforge.png',
           },
           () => unknown_icon
         )
@@ -55,6 +56,7 @@ export const game_to_game_title = (game: Game) =>
         Fabric: () => 'Fabric (Minecraft)',
         Paper: () => 'Paper (Minecraft)',
         Spigot: () => 'Spigot (Minecraft)',
+        Neoforge: () => 'Neoforge (Minecraft)',
         Other: ({ name }) => `${name} (Minecraft)`,
       }),
     Generic: ({ game_name }) => `${game_name} (Generic)`,
@@ -72,6 +74,8 @@ export const game_to_description = (game: Game) =>
           'High-performance Spigot fork that aims to fix gameplay and mechanics inconsistencies.',
         Spigot: () =>
           'Modified Minecraft server software that supports plugins, offering enhanced performance and customization options.',
+        Neoforge: () =>
+            'Forge fork focused on enhancing modding capabilities and maintaining compatibility.',
         Other: ({ name }) => `Unknown Minecraft variant: ${name}`,
       }),
     Generic: ({ game_name }) => `Unknown game: ${game_name}`,
@@ -102,4 +106,10 @@ export const HandlerGameType_to_Game: Record<HandlerGameType, Game> = {
       type: 'Paper',
     },
   },
+    MinecraftNeoforge: {
+      type: 'MinecraftJava',
+        variant: {
+          type: 'Neoforge'
+        }
+    }
 };
