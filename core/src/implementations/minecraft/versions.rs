@@ -4,6 +4,7 @@ use serde_json::Value;
 use ts_rs::TS;
 
 use crate::error::Error;
+use crate::implementations::minecraft::neoforge::get_neoforge_minecraft_versions;
 
 #[derive(Serialize, Deserialize, Debug, TS)]
 #[ts(export)]
@@ -157,6 +158,15 @@ pub async fn get_paper_versions() -> Result<MinecraftVersions, Error> {
     group_minecraft_versions(&versions).await
 }
 
+pub async fn get_neoforge_versions() -> Result<MinecraftVersions, Error> {
+    let versions_vec = get_neoforge_minecraft_versions().await?;
+    let versions = versions_vec
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<&str>>();
+    group_minecraft_versions(&versions).await
+}
+
 pub async fn get_forge_versions() -> Result<MinecraftVersions, Error> {
     let http = reqwest::Client::new();
 
@@ -191,6 +201,12 @@ mod tests {
     fn test_paper_versions() {
         let rt = tokio::runtime::Runtime::new().unwrap();
         rt.block_on(get_paper_versions()).unwrap();
+    }
+
+    #[test]
+    fn test_neoforge_versions() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        rt.block_on(get_neoforge_versions()).unwrap();
     }
 
     #[test]

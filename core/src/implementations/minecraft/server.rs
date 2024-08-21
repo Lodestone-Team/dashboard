@@ -195,6 +195,43 @@ impl TServer for MinecraftInstance {
                         .arg(&self.path_to_instance.join(server_jar_name))
                 }
             }
+
+            Flavour::Neoforge { build_version } => {
+                let neoforge_build_version = build_version
+                    .as_ref()
+                    .ok_or_else(|| eyre!("Neoforge version not found"))?;
+
+                let neoforge_args = match std::env::consts::OS {
+                    "windows" => "win_args.txt",
+                    _ => "unix_args.txt",
+                };
+
+                let mut full_neoforge_args = std::ffi::OsString::from("@");
+
+                let nf_path_buf = if neoforge_build_version.legacy {
+                    let path = self.path_to_instance
+                        .join("libraries")
+                        .join("net")
+                        .join("neoforged")
+                        .join("forge")
+                        .join(neoforge_build_version.version())
+                        .join(neoforge_args);
+                    path.into_os_string().as_os_str().to_os_string()
+                } else {
+                    let path = self.path_to_instance
+                        .join("libraries")
+                        .join("net")
+                        .join("neoforged")
+                        .join("neoforge")
+                        .join(neoforge_build_version.version())
+                        .join(neoforge_args);
+                    path.into_os_string().as_os_str().to_os_string()
+                };
+
+                full_neoforge_args.push(nf_path_buf);
+                server_start_command.arg(full_neoforge_args)
+            }
+
             _ => server_start_command
                 .arg("-jar")
                 .arg(&self.path_to_instance.join("server.jar")),

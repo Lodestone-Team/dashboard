@@ -28,6 +28,7 @@ pub enum MinecraftVariant {
     Fabric,
     Paper,
     Spigot,
+    Neoforge,
     Other { name: String },
 }
 
@@ -72,6 +73,9 @@ impl From<Flavour> for Game {
             Flavour::Forge { .. } => Self::MinecraftJava {
                 variant: MinecraftVariant::Forge,
             },
+            Flavour::Neoforge { .. } => Self::MinecraftJava {
+                variant: MinecraftVariant::Neoforge,
+            }
         }
     }
 }
