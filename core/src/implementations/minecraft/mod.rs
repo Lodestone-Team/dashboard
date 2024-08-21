@@ -3,6 +3,7 @@ pub mod fabric;
 mod forge;
 mod line_parser;
 pub mod r#macro;
+mod neoforge;
 mod paper;
 pub mod player;
 mod players_manager;
@@ -10,7 +11,6 @@ pub mod server;
 pub mod util;
 mod vanilla;
 pub mod versions;
-mod neoforge;
 
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use enum_kinds::EnumKind;
@@ -39,7 +39,9 @@ use regex::Regex;
 use crate::error::Error;
 use crate::event_broadcaster::EventBroadcaster;
 use crate::events::{Event, ProgressionEventID};
-use crate::implementations::minecraft::neoforge::{get_neoforge_minecraft_versions, NeoforgeVersion};
+use crate::implementations::minecraft::neoforge::{
+    get_neoforge_minecraft_versions, NeoforgeVersion,
+};
 use crate::macro_executor::{MacroExecutor, MacroPID};
 use crate::prelude::path_to_binaries;
 use crate::traits::t_configurable::PathBuf;
@@ -98,7 +100,7 @@ pub enum Flavour {
     },
     Neoforge {
         build_version: Option<NeoforgeVersion>,
-    }
+    },
 }
 
 impl From<FlavourKind> for Flavour {
@@ -118,7 +120,7 @@ impl From<FlavourKind> for Flavour {
             },
             FlavourKind::Neoforge => Flavour::Neoforge {
                 build_version: None,
-            }
+            },
         }
     }
 }
@@ -668,15 +670,15 @@ impl MinecraftInstance {
                     .arg(&path_to_instance)
                     .current_dir(&path_to_instance),
             )
-                .stderr(Stdio::null())
-                .stdout(Stdio::null())
-                .stdin(Stdio::null())
-                .spawn()
-                .context("Failed to start neoforge-installer.jar")?
-                .wait()
-                .await
-                .context("neoforge-installer.jar failed")?
-                .success()
+            .stderr(Stdio::null())
+            .stdout(Stdio::null())
+            .stdin(Stdio::null())
+            .spawn()
+            .context("Failed to start neoforge-installer.jar")?
+            .wait()
+            .await
+            .context("neoforge-installer.jar failed")?
+            .success()
             {
                 return Err(eyre!("Failed to install neoforge server").into());
             }

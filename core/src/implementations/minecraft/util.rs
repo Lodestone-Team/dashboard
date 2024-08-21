@@ -1,8 +1,8 @@
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use indexmap::IndexMap;
+use semver::Op;
 use serde_json::{self, Value};
 use std::{collections::BTreeMap, path::Path, str::FromStr};
-use semver::Op;
 use tokio::io::AsyncBufReadExt;
 
 use super::{
@@ -67,18 +67,20 @@ pub async fn get_server_jar_url(version: &str, flavour: &Flavour) -> Option<(Str
     }
 }
 
-pub async fn get_neoforge_jar_url(version: &str, neoforge_build_version: &Option<NeoforgeVersion>) -> Option<(String, Flavour)> {
+pub async fn get_neoforge_jar_url(
+    version: &str,
+    neoforge_build_version: &Option<NeoforgeVersion>,
+) -> Option<(String, Flavour)> {
     let latest_build = get_neoforge_latest_build(Some(version)).await.ok()?;
 
-    let build = neoforge_build_version
-        .as_ref()
-        .unwrap_or(&latest_build);
+    let build = neoforge_build_version.as_ref().unwrap_or(&latest_build);
 
     Some((
         build.installer_url(),
-        Flavour::Neoforge { build_version: Some(build.clone())}
+        Flavour::Neoforge {
+            build_version: Some(build.clone()),
+        },
     ))
-
 }
 
 pub async fn get_vanilla_jar_url(version: &str) -> Option<(String, Flavour)> {
@@ -459,13 +461,13 @@ pub async fn name_to_uuid(name: impl AsRef<str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use std::str::FromStr;
+    use crate::implementations::minecraft::neoforge::NeoforgeVersion;
     use crate::minecraft::{
         util::{get_forge_jar_url, get_server_jar_url},
         FabricInstallerVersion, FabricLoaderVersion, Flavour, ForgeBuildVersion, PaperBuildVersion,
     };
+    use std::str::FromStr;
     use tokio;
-    use crate::implementations::minecraft::neoforge::NeoforgeVersion;
 
     #[tokio::test]
     async fn test_get_vanilla_jar_url() {

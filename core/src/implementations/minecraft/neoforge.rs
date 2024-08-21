@@ -1,20 +1,17 @@
+use crate::error::Error;
+use crate::traits::t_configurable::{Deserialize, Serialize};
+use color_eyre::eyre::{eyre, Context};
+use serde_json::Value;
 use std::fmt;
 use std::fmt::Formatter;
 use std::str::FromStr;
-use color_eyre::eyre::{eyre, Context};
-use enum_kinds::EnumKind;
-use serde_json::Value;
 use ts_rs::TS;
-use crate::error::Error;
-use crate::traits::t_configurable::{Deserialize, Serialize};
 
 pub async fn get_neoforge_minecraft_versions() -> Result<Vec<String>, Error> {
     let versions = request_neoforge_versions().await?;
     let mut minecraft_versions: Vec<String> = versions
         .iter()
-        .map(|version| {
-            format!("1.{}.{}", version.major, version.minor)
-        })
+        .map(|version| format!("1.{}.{}", version.major, version.minor))
         .collect();
 
     minecraft_versions.dedup();
@@ -23,12 +20,16 @@ pub async fn get_neoforge_minecraft_versions() -> Result<Vec<String>, Error> {
     Ok(minecraft_versions)
 }
 
-pub async fn get_neoforge_builds(minecraft_version: Option<&str>) -> Result<Vec<NeoforgeVersion>, Error> {
+pub async fn get_neoforge_builds(
+    minecraft_version: Option<&str>,
+) -> Result<Vec<NeoforgeVersion>, Error> {
     let versions = request_neoforge_versions().await?;
     let build_versions = versions
         .iter()
         .filter(|version| {
-            minecraft_version.is_none() || format!("1.{}.{}", version.major, version.minor) == minecraft_version.clone().unwrap()
+            minecraft_version.is_none()
+                || format!("1.{}.{}", version.major, version.minor)
+                    == minecraft_version.clone().unwrap()
         })
         .cloned()
         .collect::<Vec<NeoforgeVersion>>();
@@ -36,7 +37,9 @@ pub async fn get_neoforge_builds(minecraft_version: Option<&str>) -> Result<Vec<
     Ok(build_versions)
 }
 
-pub async fn get_neoforge_latest_build(minecraft_version: Option<&str>) -> Result<NeoforgeVersion, Error> {
+pub async fn get_neoforge_latest_build(
+    minecraft_version: Option<&str>,
+) -> Result<NeoforgeVersion, Error> {
     let version_builds = get_neoforge_builds(minecraft_version).await?;
 
     let latest_version = version_builds
@@ -58,17 +61,18 @@ async fn request_neoforge_versions() -> Result<Vec<NeoforgeVersion>, Error> {
             .text()
             .await
             .context("Failed to get legacy neoforge versions")?
-            .as_str()
-    ).context("Failed to get legacy neoforge versions")?;
+            .as_str(),
+    )
+    .context("Failed to get legacy neoforge versions")?;
 
     let legacy_versions = legacy_response["versions"]
         .as_array()
-        .ok_or_else(|| eyre!("Failed to get legacy neoforge versions. Version array is not an array"))?
+        .ok_or_else(|| {
+            eyre!("Failed to get legacy neoforge versions. Version array is not an array")
+        })?
         .iter()
         .filter(|v| v.as_str().unwrap().contains("-"))
-        .map(|v| {
-            NeoforgeVersion::from_str(v.as_str().unwrap()).unwrap()
-        })
+        .map(|v| NeoforgeVersion::from_str(v.as_str().unwrap()).unwrap())
         .collect::<Vec<NeoforgeVersion>>();
 
     let response: Value = serde_json::from_str(
@@ -80,22 +84,23 @@ async fn request_neoforge_versions() -> Result<Vec<NeoforgeVersion>, Error> {
             .await
             .context("Failed to get neoforge versions")?
             .as_str(),
-    ).context("Failed to get neoforge versions")?;
+    )
+    .context("Failed to get neoforge versions")?;
 
     let main_versions = response["versions"]
         .as_array()
         .ok_or_else(|| eyre!("Failed to get neoforge versions. Versions array is not an array"))?
         .iter()
-        .map(|v| {
-            NeoforgeVersion::from_str(v.as_str().unwrap()).unwrap()
-        })
+        .map(|v| NeoforgeVersion::from_str(v.as_str().unwrap()).unwrap())
         .collect::<Vec<NeoforgeVersion>>();
 
     let versions = [main_versions, legacy_versions].concat();
     Ok(versions)
 }
 
-fn split_neoforge_version(version: &str) -> Result<(String, String, (String, Option<String>)), VersionError> {
+fn split_neoforge_version(
+    version: &str,
+) -> Result<(String, String, (String, Option<String>)), VersionError> {
     let mut split = version.split('.');
 
     let major_version = split.next().ok_or(VersionError::InvalidFormat)?.to_string();
@@ -144,8 +149,12 @@ impl FromStr for NeoforgeVersion {
 
         let (major_str, minor_str, (patch_str, _)) = split_neoforge_version(&value)?;
 
-        let major = major_str.parse::<i32>().map_err(|_| VersionError::InvalidNumber)?;
-        let minor = minor_str.parse::<i32>().map_err(|_| VersionError::InvalidNumber)?;
+        let major = major_str
+            .parse::<i32>()
+            .map_err(|_| VersionError::InvalidNumber)?;
+        let minor = minor_str
+            .parse::<i32>()
+            .map_err(|_| VersionError::InvalidNumber)?;
 
         Ok(NeoforgeVersion::new(major, minor, patch_str, is_legacy))
     }
@@ -153,7 +162,10 @@ impl FromStr for NeoforgeVersion {
 
 impl PartialEq for NeoforgeVersion {
     fn eq(&self, other: &Self) -> bool {
-        self.major == other.major && self.legacy == other.legacy && self.minor == other.minor && self.patch == other.patch
+        self.major == other.major
+            && self.legacy == other.legacy
+            && self.minor == other.minor
+            && self.patch == other.patch
     }
 }
 
@@ -185,7 +197,7 @@ impl NeoforgeVersion {
 #[derive(Debug, TS)]
 pub enum VersionError {
     InvalidFormat,
-    InvalidNumber
+    InvalidNumber,
 }
 
 impl fmt::Display for VersionError {
@@ -193,7 +205,7 @@ impl fmt::Display for VersionError {
         match self {
             VersionError::InvalidFormat => write!(f, "Invalid version format."),
             VersionError::InvalidNumber => write!(f, "Invalid number in version."),
-            _ => write!(f, "How did we get here?")
+            _ => write!(f, "How did we get here?"),
         }
     }
 }
@@ -216,11 +228,17 @@ mod test {
     #[tokio::test]
     async fn test_get_neoforge_latest_build() {
         assert_eq!(
-            get_neoforge_latest_build(Some("1.20.2")).await.unwrap().version(),
+            get_neoforge_latest_build(Some("1.20.2"))
+                .await
+                .unwrap()
+                .version(),
             "20.2.88".to_string()
         );
         assert_eq!(
-            get_neoforge_latest_build(Some("1.20.1")).await.unwrap().version(),
+            get_neoforge_latest_build(Some("1.20.1"))
+                .await
+                .unwrap()
+                .version(),
             "1.20.1-47.1.106".to_string()
         );
     }

@@ -209,7 +209,8 @@ impl TServer for MinecraftInstance {
                 let mut full_neoforge_args = std::ffi::OsString::from("@");
 
                 let nf_path_buf = if neoforge_build_version.legacy {
-                    let path = self.path_to_instance
+                    let path = self
+                        .path_to_instance
                         .join("libraries")
                         .join("net")
                         .join("neoforged")
@@ -218,7 +219,8 @@ impl TServer for MinecraftInstance {
                         .join(neoforge_args);
                     path.into_os_string().as_os_str().to_os_string()
                 } else {
-                    let path = self.path_to_instance
+                    let path = self
+                        .path_to_instance
                         .join("libraries")
                         .join("net")
                         .join("neoforged")
