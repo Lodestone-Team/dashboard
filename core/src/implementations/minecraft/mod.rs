@@ -159,6 +159,7 @@ pub struct RestoreConfig {
     pub description: String,
     pub cmd_args: Vec<String>,
     pub java_cmd: Option<String>,
+    pub custom_cmd: Option<String>,
     pub port: u32,
     pub min_ram: u32,
     pub max_ram: u32,
@@ -396,6 +397,9 @@ impl MinecraftInstance {
         cmd_args_config_map.insert(max_ram.get_identifier().to_owned(), max_ram.into());
         let java_cmd = CmdArgSetting::JavaCmd(java_cmd);
         cmd_args_config_map.insert(java_cmd.get_identifier().to_owned(), java_cmd.into());
+        let custom_cmd =
+            CmdArgSetting::CustomCmd(restore_config.custom_cmd.clone().unwrap_or(String::new()));
+        cmd_args_config_map.insert(custom_cmd.get_identifier().to_owned(), custom_cmd.into());
 
         let cmd_line_section_manifest = SectionManifest::new(
             CmdArgSetting::get_section_id().to_string(),
@@ -638,12 +642,34 @@ impl MinecraftInstance {
             1.0,
         ));
 
+        // let custom_args = if let Some(custom_cmd) = config.custom_cmd.clone() {
+        //     let mut split: Vec<String> = custom_cmd.split(" ").map(|c| String::from(c)).collect();
+        //     if split.len() != 0 {
+        //         split.remove(0);
+        //     }
+        //     split
+        // } else {
+        //     vec![]
+        // };
+        //
+        // let custom_cmd = if let Some(custom_cmd) = config.custom_cmd.clone() {
+        //     let split: Vec<String> = custom_cmd.split(" ").map(|c| String::from(c)).collect();
+        //     if split.len() == 0 {
+        //         None
+        //     } else {
+        //         Some(split[0].clone())
+        //     }
+        // } else {
+        //     None
+        // };
+
         let restore_config = RestoreConfig {
             name: config.name,
             version: config.version,
             flavour,
             description: config.description.unwrap_or_default(),
             cmd_args: config.cmd_args,
+            custom_cmd: None,
             port: config.port,
             min_ram: config.min_ram.unwrap_or(2048),
             max_ram: config.max_ram.unwrap_or(4096),
@@ -876,6 +902,18 @@ impl MinecraftInstance {
         config_lock.java_cmd = Some(
             configurable_map
                 .get(CmdArgSetting::JavaCmd(Default::default()).get_identifier())
+                .expect("Programming error, value is not set")
+                .get_value()
+                .expect("Programming error, value is not set")
+                .clone()
+                .try_as_string()
+                .expect("Programming error, value is not a string")
+                .to_owned(),
+        );
+
+        config_lock.custom_cmd = Some(
+            configurable_map
+                .get(CmdArgSetting::CustomCmd(Default::default()).get_identifier())
                 .expect("Programming error, value is not set")
                 .get_value()
                 .expect("Programming error, value is not set")
