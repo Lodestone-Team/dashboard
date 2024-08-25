@@ -1,13 +1,116 @@
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use indexmap::IndexMap;
 use serde_json::{self, Value};
-use std::{collections::BTreeMap, path::Path, str::FromStr};
-use tokio::io::AsyncBufReadExt;
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
+use tokio::{io::AsyncBufReadExt, process::Command};
 
 use super::{
     FabricInstallerVersion, FabricLoaderVersion, Flavour, ForgeBuildVersion, PaperBuildVersion,
+    RestoreConfig,
 };
-use crate::error::Error;
+use crate::{error::Error, util::list_dir};
+
+pub async fn create_java_launch_cmd(
+    config: RestoreConfig,
+    jre: PathBuf,
+    path_to_instance: PathBuf,
+) -> Result<Command, Error> {
+    let mut server_start_command = Command::new(&jre);
+    server_start_command
+        .arg(format!("-Xmx{}M", config.max_ram))
+        .arg(format!("-Xms{}M", config.min_ram))
+        .args(
+            &config
+                .cmd_args
+                .iter()
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<&String>>(),
+        );
+
+    match &config.flavour {
+        Flavour::Forge { build_version } => {
+            let ForgeBuildVersion(build_version) = build_version
+                .as_ref()
+                .ok_or_else(|| eyre!("Forge version not found"))?;
+            let version_parts: Vec<&str> = config.version.split('.').collect();
+            let major_version: i32 = version_parts[1]
+                .parse()
+                .context("Unable to parse major Minecraft version for Forge")?;
+
+            if 17 <= major_version {
+                let forge_args = match std::env::consts::OS {
+                    "windows" => "win_args.txt",
+                    _ => "unix_args.txt",
+                };
+
+                let mut full_forge_args = std::ffi::OsString::from("@");
+                full_forge_args.push(
+                    path_to_instance
+                        .join("libraries")
+                        .join("net")
+                        .join("minecraftforge")
+                        .join("forge")
+                        .join(build_version.as_str())
+                        .join(forge_args)
+                        .into_os_string()
+                        .as_os_str(),
+                );
+
+                server_start_command.arg(full_forge_args)
+            } else if (7..=16).contains(&major_version) {
+                let files = list_dir(&path_to_instance, Some(false))
+                    .await
+                    .context("Failed to find forge.jar")?;
+                let forge_jar_name = files
+                    .iter()
+                    .find(|p| {
+                        p.extension().unwrap_or_default() == "jar"
+                            && p.file_name()
+                                .unwrap_or_default()
+                                .to_str()
+                                .unwrap_or_default()
+                                .starts_with(format!("forge-{}-", config.version,).as_str())
+                    })
+                    .ok_or_else(|| eyre!("Failed to find forge.jar"))?;
+                server_start_command
+                    .arg("-jar")
+                    .arg(&path_to_instance.join(forge_jar_name))
+            } else {
+                // 1.5 doesn't work due to JRE issues
+                // 1.4 doesn't work since forge doesn't provide an installer
+                let files = list_dir(&path_to_instance, Some(false))
+                    .await
+                    .context("Failed to find minecraftforge.jar")?;
+                let server_jar_name = files
+                    .iter()
+                    .find(|p| {
+                        p.extension().unwrap_or_default() == "jar"
+                            && p.file_name()
+                                .unwrap_or_default()
+                                .to_str()
+                                .unwrap_or_default()
+                                .starts_with("minecraftforge")
+                    })
+                    .ok_or_else(|| eyre!("Failed to find minecraftforge.jar"))?;
+                server_start_command
+                    .arg("-jar")
+                    .arg(&path_to_instance.join(server_jar_name))
+            }
+        }
+        _ => server_start_command
+            .arg("-jar")
+            .arg(&path_to_instance.join("server.jar")),
+    };
+
+    server_start_command.arg("nogui");
+    println!("{:?}", server_start_command);
+
+    Ok(server_start_command)
+}
 
 pub async fn read_properties_from_path(
     path_to_properties: &Path,
