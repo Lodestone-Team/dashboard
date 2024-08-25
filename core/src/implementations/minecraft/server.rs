@@ -21,11 +21,11 @@ use crate::traits::t_macro::TaskEntry;
 use crate::traits::t_server::{MonitorReport, State, StateAction, TServer};
 
 use crate::types::Snowflake;
-use crate::util::{dont_spawn_terminal, list_dir};
+use crate::util::dont_spawn_terminal;
 
 use super::r#macro::resolve_macro_invocation;
 use super::util::create_java_launch_cmd;
-use super::{Flavour, ForgeBuildVersion, MinecraftInstance};
+use super::MinecraftInstance;
 use tracing::{error, info, warn};
 
 #[async_trait::async_trait]
@@ -136,9 +136,9 @@ impl TServer for MinecraftInstance {
             server_start_command
         };
 
-        let server_start_command = server_start_command.current_dir(&self.path_to_instance);
+        server_start_command.current_dir(&self.path_to_instance);
 
-        match dont_spawn_terminal(server_start_command)
+        match dont_spawn_terminal(&mut server_start_command)
             .stdout(Stdio::piped())
             .stdin(Stdio::piped())
             .stderr(Stdio::piped())

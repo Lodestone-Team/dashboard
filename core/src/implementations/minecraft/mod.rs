@@ -397,7 +397,8 @@ impl MinecraftInstance {
         cmd_args_config_map.insert(max_ram.get_identifier().to_owned(), max_ram.into());
         let java_cmd = CmdArgSetting::JavaCmd(java_cmd);
         cmd_args_config_map.insert(java_cmd.get_identifier().to_owned(), java_cmd.into());
-        let custom_cmd = CmdArgSetting::CustomCmd(String::new());
+        let custom_cmd =
+            CmdArgSetting::CustomCmd(restore_config.custom_cmd.clone().unwrap_or(String::new()));
         cmd_args_config_map.insert(custom_cmd.get_identifier().to_owned(), custom_cmd.into());
 
         let cmd_line_section_manifest = SectionManifest::new(

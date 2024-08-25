@@ -107,7 +107,6 @@ pub async fn create_java_launch_cmd(
     };
 
     server_start_command.arg("nogui");
-    println!("{:?}", server_start_command);
 
     Ok(server_start_command)
 }
