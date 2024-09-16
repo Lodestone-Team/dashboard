@@ -155,6 +155,12 @@ impl TConfigurable for MinecraftInstance {
                     source: eyre!("Changing versions is unsupported for forge servers"),
                 })
             }
+            super::Flavour::Neoforge { .. } => {
+                return Err(Error {
+                    kind: ErrorKind::UnsupportedOperation,
+                    source: eyre!("Changing versions is unsupported for forge servers"), //TODO
+                });
+            }
         };
         let lodestone_tmp = path_to_tmp().clone();
         let temp_dir = tempfile::tempdir_in(lodestone_tmp).context("Failed to create temp dir")?;

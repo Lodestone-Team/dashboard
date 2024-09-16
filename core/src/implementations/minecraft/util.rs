@@ -1,5 +1,6 @@
 use color_eyre::eyre::{eyre, Context, ContextCompat};
 use indexmap::IndexMap;
+use semver::Op;
 use serde_json::{self, Value};
 use std::{collections::BTreeMap, path::Path, str::FromStr};
 use tokio::io::AsyncBufReadExt;
@@ -8,6 +9,7 @@ use super::{
     FabricInstallerVersion, FabricLoaderVersion, Flavour, ForgeBuildVersion, PaperBuildVersion,
 };
 use crate::error::Error;
+use crate::implementations::minecraft::neoforge::{get_neoforge_latest_build, NeoforgeVersion};
 
 pub async fn read_properties_from_path(
     path_to_properties: &Path,
@@ -59,9 +61,26 @@ pub async fn get_server_jar_url(version: &str, flavour: &Flavour) -> Option<(Str
             installer_version,
         } => get_fabric_jar_url(version, loader_version, installer_version).await,
         Flavour::Paper { build_version } => get_paper_jar_url(version, build_version).await,
-        Flavour::Spigot => todo!(),
+        Flavour::Neoforge { build_version } => get_neoforge_jar_url(version, build_version).await,
         Flavour::Forge { build_version } => get_forge_jar_url(version, build_version).await.ok(),
+        Flavour::Spigot => todo!(),
     }
+}
+
+pub async fn get_neoforge_jar_url(
+    version: &str,
+    neoforge_build_version: &Option<NeoforgeVersion>,
+) -> Option<(String, Flavour)> {
+    let latest_build = get_neoforge_latest_build(Some(version)).await.ok()?;
+
+    let build = neoforge_build_version.as_ref().unwrap_or(&latest_build);
+
+    Some((
+        build.installer_url(),
+        Flavour::Neoforge {
+            build_version: Some(build.clone()),
+        },
+    ))
 }
 
 pub async fn get_vanilla_jar_url(version: &str) -> Option<(String, Flavour)> {
@@ -442,10 +461,12 @@ pub async fn name_to_uuid(name: impl AsRef<str>) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    use crate::implementations::minecraft::neoforge::NeoforgeVersion;
     use crate::minecraft::{
         util::{get_forge_jar_url, get_server_jar_url},
         FabricInstallerVersion, FabricLoaderVersion, Flavour, ForgeBuildVersion, PaperBuildVersion,
     };
+    use std::str::FromStr;
     use tokio;
 
     #[tokio::test]
@@ -493,6 +514,44 @@ mod tests {
         assert!(super::get_fabric_jar_url("21w44a", &None, &None)
             .await
             .is_some());
+    }
+
+    #[tokio::test]
+    async fn test_get_neoforge_jar_url() {
+        assert_eq!(
+            super::get_neoforge_jar_url(
+                "1.20.2",
+                &Some(NeoforgeVersion::from_str("20.2.88")).unwrap().ok()).await,
+            Some((
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/20.2.88/neoforge-20.2.88-installer.jar".to_string(),
+                Flavour::Neoforge {
+                    build_version: Some(super::NeoforgeVersion::from_str("20.2.88").unwrap())
+                }
+            ))
+        );
+
+        assert_eq!(
+            super::get_neoforge_jar_url("1.21.0", &None).await,
+            Some(("https://maven.neoforged.net/releases/net/neoforged/neoforge/21.0.167/neoforge-21.0.167-installer.jar".to_string(),
+                  Flavour::Neoforge { build_version: Some(super::NeoforgeVersion::from_str("21.0.167").unwrap()) }
+            ))
+        );
+
+        assert_eq!(
+            super::get_neoforge_jar_url("1.20.2", &None).await,
+            Some((
+                "https://maven.neoforged.net/releases/net/neoforged/neoforge/20.2.88/neoforge-20.2.88-installer.jar".to_string(),
+                Flavour::Neoforge { build_version: Some(super::NeoforgeVersion::from_str("20.2.88").unwrap()) }
+            ))
+        );
+
+        assert_eq!(
+            super::get_neoforge_jar_url("1.20.1", &None).await,
+            Some((
+                "https://maven.neoforged.net/releases/net/neoforged/forge/1.20.1-47.1.106/forge-1.20.1-47.1.106-installer.jar".to_string(),
+                Flavour::Neoforge { build_version: Some(super::NeoforgeVersion::from_str("1.20.1-47.1.106").unwrap()) }
+            ))
+        );
     }
 
     #[tokio::test]
