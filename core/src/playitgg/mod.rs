@@ -395,7 +395,6 @@ pub async fn get_tunnels(
                     let local_port_value = origin_data.get("local_port");
                     let local_ip_value = origin_data.get("local_ip");
                     let assigned_domain_value = alloc_data.get("assigned_domain");
-                    let assigned_port_value = alloc_data.get("port_start");
 
                     if !(local_port_value.is_some()
                         && local_ip_value.is_some()
@@ -410,7 +409,6 @@ pub async fn get_tunnels(
                     let local_port = local_port_value.unwrap().as_i64();
                     let local_ip = local_ip_value.unwrap().as_str();
                     let assigned_domain = assigned_domain_value.unwrap().as_str();
-                    let assigned_port = assigned_port_value.unwrap().as_i64();
 
                     if !(local_port.is_some() && local_ip.is_some() && assigned_domain.is_some()) {
                         return Err(Error {
@@ -425,11 +423,7 @@ pub async fn get_tunnels(
                         name,
                         tunnel_id: TunnelUuid(id),
                         active,
-                        server_address: format!(
-                            "{}:{}",
-                            assigned_domain.unwrap(),
-                            assigned_port.unwrap()
-                        ),
+                        server_address: format!("{}", assigned_domain.unwrap(),),
                     });
                 }
                 Ok(Json(res))
