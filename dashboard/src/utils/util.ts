@@ -216,7 +216,7 @@ export function parseFloatStrict(value: string): number {
   return parsed;
 }
 
-  
+
 
 export function getWidth(
   el: HTMLElement,
@@ -280,11 +280,9 @@ export const formatDuration = (duration: number) => {
   const hours = Math.floor((duration % 86400) / 3600);
   const minutes = Math.floor((duration % 3600) / 60);
   const seconds = Math.floor(duration % 60);
-  return `${days < 10 ? '0' + days : days}:${
-    hours < 10 ? '0' + hours : hours
-  }:${minutes < 10 ? '0' + minutes : minutes}:${
-    seconds < 10 ? '0' + seconds : seconds
-  }`;
+  return `${days < 10 ? '0' + days : days}:${hours < 10 ? '0' + hours : hours
+    }:${minutes < 10 ? '0' + minutes : minutes}:${seconds < 10 ? '0' + seconds : seconds
+    }`;
 };
 
 // format message time for notifications
@@ -355,14 +353,17 @@ export const getSnowflakeTimestamp = (snowflake: string) => {
 };
 
 
-export const chooseFiles = async () => {
+export const chooseFiles = async (multiple = true) => {
   const input = document.createElement('input');
   input.type = 'file';
-  input.multiple = true;
+  input.multiple = multiple;
   input.click();
   return new Promise<FileList | null>((resolve) => {
     input.onchange = () => {
       resolve(input.files);
+    };
+    input.oncancel = () => {
+      resolve(null);
     };
   });
 };

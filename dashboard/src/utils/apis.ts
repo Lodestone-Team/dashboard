@@ -30,6 +30,69 @@ import { PlayitTunnelInfo } from 'bindings/PlayitTunnelInfo';
  * Start Files API
  ***********************/
 
+export const getTmpPath = async () => {
+  const tmpPath = await axiosWrapper<string>({
+    method: 'get',
+    url: `/fs/tmp_path`,
+  });
+
+  return tmpPath;
+};
+
+export const uploadTmpFile = async (
+  file: Array<File>,
+) => {
+  // upload all files using multipart form data
+  const formData = new FormData();
+  file.forEach((f) => {
+    formData.append('file', f);
+  });
+  toast.info(`Uploading ${file.length} ${file.length > 1 ? 'files' : 'file'}`);
+  const error = await catchAsyncToString(
+    axiosWrapper<null>({
+      method: 'put',
+      url: '/fs/upload_tmp',
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 0,
+    })
+  );
+  if (error) {
+    toast.error(error);
+    return;
+  }
+};
+
+export const uploadFile = async (
+  directory: string,
+  file: Array<File>,
+) => {
+  // upload all files using multipart form data
+  const formData = new FormData();
+  file.forEach((f) => {
+    formData.append('file', f);
+  });
+  toast.info(`Uploading ${file.length} ${file.length > 1 ? 'files' : 'file'}`);
+  const error = await catchAsyncToString(
+    axiosWrapper<null>({
+      method: 'put',
+      url: `/fs/${Base64.encode(directory, true)}/upload`,
+      data: formData,
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 0,
+    })
+  );
+  if (error) {
+    toast.error(error);
+    return;
+  }
+};
+
+
 export const saveInstanceFile = async (
   uuid: string,
   directory: string,
@@ -463,15 +526,15 @@ export const getMacroConfig = async (uuid: string, macro_name: string) => {
 
 // write macro local config
 export const storeMacroConfig = async (
-  uuid: string, 
-  macro_name: string, 
+  uuid: string,
+  macro_name: string,
   config: Record<string, SettingManifest>) => {
-    const serverResponse = await axiosWrapper<unknown>({
-      method: 'post',
-      url: `/instance/${uuid}/macro/config/store/${macro_name}`,
-      data: config
-    })
-    return serverResponse;
+  const serverResponse = await axiosWrapper<unknown>({
+    method: 'post',
+    url: `/instance/${uuid}/macro/config/store/${macro_name}`,
+    data: config
+  })
+  return serverResponse;
 }
 
 export const getInstanceHistory = async (uuid: string) => {
