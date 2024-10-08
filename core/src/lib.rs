@@ -707,7 +707,11 @@ pub async fn run(
                     debug!("Port {port} is already in use, trying next port");
                     port += 1;
                 }
-                let addr = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], port));
+                let addr = if cfg!(windows) {
+                    SocketAddr::new(std::net::IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED), port)
+                } else {
+                    SocketAddr::new(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED), port)
+                };
                 let axum_server_handle = axum_server::Handle::new();
                 tokio::spawn({
                     let axum_server_handle = axum_server_handle.clone();
