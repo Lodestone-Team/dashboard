@@ -15,3 +15,6 @@ FROM nginx
 WORKDIR /usr/share/nginx/html
 
 COPY --from=build /app/out/ ./
+# Replace the default server configuration, but leave the overall nginx
+# configuration
+COPY ./docker/server.nginx.conf /etc/nginx/conf.d/default.conf

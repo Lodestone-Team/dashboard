@@ -58,7 +58,7 @@ jobs:
         with:
           context: ./dashboard
           platforms: linux/amd64,linux/arm64
-          file: ./dashboard/Dockerfile
+          file: ./dashboard/docker/Dockerfile
           push: true
           tags: |
             ${{ steps.string_tag.outputs.lowercase }}:latest
