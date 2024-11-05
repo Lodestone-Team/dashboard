@@ -4,6 +4,7 @@ import { sleep } from "https://deno.land/x/sleep@v1.2.1/mod.ts";
 import { EventStream } from "https://raw.githubusercontent.com/Lodestone-Team/lodestone-macro-lib/main/events.ts";
 import { lodestoneVersion } from "https://raw.githubusercontent.com/Lodestone-Team/lodestone-macro-lib/main/prelude.ts";
 import { MinecraftJavaInstance } from "https://raw.githubusercontent.com/Lodestone-Team/lodestone-macro-lib/main/instance.ts";
+import { compress } from "https://deno.land/x/zip@v1.2.5/mod.ts";
 
 const currentInstance = await MinecraftJavaInstance.current();
 
@@ -18,6 +19,10 @@ class LodestoneConfig {
   backupFolderRelative: string = "backups";
   // How long to wait between backups in seconds
   delaySec: number = 3600;
+  // Comma-separated list of folders to back up
+  foldersToBackup: string = "world, world_nether, world_the_end";
+  // Compress the backup? 
+  compressBackup: boolean = true;
 }
 
 // not technically necessary, but it's a good practice to appease the linter
@@ -38,11 +43,31 @@ while (true) {
 
   const now = new Date();
   const now_str = format(now, "yy-MM-dd_HH");
-  try {
-    await copy(`${instancePath}/world`, `${backupFolder}/backup_${now_str}`);
-  } catch (e) {
-    console.log(e);
+  const combinedBackupFolder = `${backupFolder}/backup_${now_str}`;
+  // Split the string by commas to get an array of folders and iterate over them
+  for (const folder of config.foldersToBackup.split(',')) {
+    const trimmedFolder = folder.trim();
+    try {
+      const sourceFolder = `${instancePath}/${trimmedFolder}`;
+      const destinationFolder = `${combinedBackupFolder}/${trimmedFolder}`;
+      await eventStream.emitConsoleOut(`[Backup Macro] Backing up ${trimmedFolder}...`);
+      await copy(sourceFolder, destinationFolder);
+      await eventStream.emitConsoleOut(`[Backup Macro] Backup of ${trimmedFolder} completed.`);
+    } catch (e) {
+      console.log(`[Backup Macro] Error backing up ${trimmedFolder}:`, e);
+    }
+  }
+
+  if (config.compressBackup) {
+    try {
+      await eventStream.emitConsoleOut(`[Backup Macro] Compressing backup...`);
+      await compress(`${combinedBackupFolder}`, `${instancePath}/${config.backupFolderRelative}/${combinedBackupFolder}.zip`);
+      await eventStream.emitConsoleOut(`[Backup Macro] Compression completed.`);
+    } catch (e) {
+      console.log(`[Backup Macro] Error compressing backup folder:`, e);
+    }
   }
 
   await sleep(config.delaySec);
 }
+
