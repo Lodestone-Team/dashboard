@@ -60,8 +60,8 @@ while (true) {
 
   if (config.compressBackup) {
     try {
-      await eventStream.emitConsoleOut(`[Backup Macro] Compressing backup...`);
-      await compress(`${combinedBackupFolder}`, `${instancePath}/${config.backupFolderRelative}/${combinedBackupFolder}.zip`);
+      await eventStream.emitConsoleOut(`[Backup Macro] Compressing backup folder: ${combinedBackupFolder}...`);
+      await compress(`${combinedBackupFolder}/`, `${combinedBackupFolder}.zip`);
       await eventStream.emitConsoleOut(`[Backup Macro] Compression completed.`);
     } catch (e) {
       console.log(`[Backup Macro] Error compressing backup folder:`, e);
